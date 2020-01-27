@@ -6,6 +6,6 @@ Date: 2020-01-27
 Author: Subhomoy Ghosh
 Maintainer: Subhomoy Ghosh <subhomoyghosh@users.noreply.github.com>
 Description:  Current R Blas or Openblas doesn't provide multithreaded sparse-matrix multiplication. This is a sparse matrix multiplication package in RcppArmadillo and R using OpenMp.
-License: What license is it under?
+License: GPL (>= 2)
 Imports: Rcpp (>= 1.0.2)
 LinkingTo: Rcpp, RcppArmadillo
