@@ -15,11 +15,11 @@ on top of the two input matrices.
 
 These arguments basically sum up the entire package description. An example is added on the package description page! 
 
-### Install instruction
+### Installation
 devtools::install_github('subhomoyghosh/spmatMult/spmatMult')
 
 
-### Minimal example 
+### A basic example 
 
 ```@{r}
 #### Generate two random matrices
