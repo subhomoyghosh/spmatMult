@@ -24,6 +24,7 @@ devtools::install_github('subhomoyghosh/spmatMult/spmatMult')
 ```@{r}
 #### Generate two random matrices
 library(Matrix)
+library(spmatMult)
 
 nrA<- 1000; nrB<- 10000
 ncA<- 10000; ncB<- 5000
