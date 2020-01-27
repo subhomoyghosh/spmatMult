@@ -22,7 +22,6 @@ Note: You need to have RcppArmadillo configured with OpenMp. For Mac user, Coatl
 Technical Note: Improving the computational efficiency of sparse matrix multiplication in linear atmospheric inverse problems, Yadav et al. 
 }
 
-}
 
 \author{
 
