@@ -1,6 +1,6 @@
 # spmatMult
 
-This is a package that provides efficient sparse sparse matrix multiplication using parallel architecture. It uses 
+This is a R package that provides efficient sparse sparse matrix multiplication using parallel architecture. It uses 
 Rcpp and RcppArmadillo. Sparse sparse matrix multiplication algorithm used here is inspired by [Yadav et al.'s](https://www.geosci-model-dev-discuss.net/gmd-2016-204/gmd-2016-204.pdf) approach  
 to implement Gustavson (1978) algorithm.
 
