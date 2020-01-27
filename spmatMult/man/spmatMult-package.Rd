@@ -14,7 +14,7 @@ This is an adaptation of Yadav et. al. 's \code{\link[https://www.geosci-model-d
 
 Usage of the functions in this package from R assumes Matrix library is loaded.
 
-Note: You need to have RcppArmadillo configured with OpenMp. For Mac user, Coatless has an awesome repo  \code{\link[https://github.com/coatless/r-macos-rtools/] {here}}.
+Note: You need to have RcppArmadillo configured with OpenMp. For Mac user, Coatless has an awesome repo  \code{\link[https://github.com/coatless/r-macos-rtools/]{here}}.
 
 }
 
