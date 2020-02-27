@@ -1,4 +1,5 @@
 
+
 #include <RcppArmadillo.h>
 #include<omp.h>
 
@@ -55,6 +56,7 @@ uvec element_add(uvec &A,int &x){
 
 
 /// column bind multiple sparse matrices
+// [[Rcpp::export]]
 sp_mat cbind_field_spmat(field<sp_mat> A){
 
   int n = A.n_rows;
@@ -76,18 +78,21 @@ sp_mat cbind_field_spmat(field<sp_mat> A){
 
   for(int i=0;i<n;i++){
     int nval = A(i,0).n_nonzero;
-    int nc = A(i,0).n_cols;
-    uvec Air(A(i,0).row_indices,nval);
-    ir.subvec(idx,idx+nval-1)= Air ;
+    int nc = A(i,0).n_cols; 
+    
+     if(nval>0){
+       uvec Air(A(i,0).row_indices,nval);
+       ir.subvec(idx,idx+nval-1)= Air ;
 
-    vec Aval(A(i,0).values,nval);
-    vals.subvec(idx,idx+nval-1)= Aval;
-
-    uvec cptrA(A(i,0).col_ptrs,nc+1);
-    cptrA= element_add(cptrA,idx);
-    cptr.subvec(idc,idc+nc-1) =cptrA.subvec(1,nc);
-    idx+=nval;
-    idc +=nc;
+       vec Aval(A(i,0).values,nval);
+       vals.subvec(idx,idx+nval-1)= Aval;
+      
+     }
+      uvec cptrA(A(i,0).col_ptrs,nc+1);
+      cptrA= element_add(cptrA,idx);
+      cptr.subvec(idc,idc+nc-1) =cptrA.subvec(1,nc);
+      idx+=nval;
+      idc +=nc;
   }
 
   // Put in the sp_mat container
@@ -128,99 +133,106 @@ uvec resizethis(uvec &A){
 // [[Rcpp::export]]
 sp_mat spsp_to_spgen_serial(const arma::sp_mat &A, const arma::sp_mat &B, double p){
   
-  
+   
   // Define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
+  sp_mat C(mA,nB);
   
-  // approximate initial number of non-zeros in the resultant matrix
+  if(nnzA>0 && nnzB>0){
+    
+    // approximate initial number of non-zeros in the resultant matrix
      uword nnzC = ceil(mA * nB * p);
   
-  // Initialize colptr, row_index and value vectors for the resultant sparse matrix
-  uvec colptrC(nB+1);
-  colptrC.zeros();
+   // Initialize colptr, row_index and value vectors for the resultant sparse matrix
+     uvec colptrC(nB+1);
+     colptrC.zeros();
   
   
-  uvec rowvalC(nnzC);
-  rowvalC.zeros();
+    uvec rowvalC(nnzC);
+    rowvalC.zeros();
   
   
-  colvec nzvalC(nnzC);
-  nzvalC.zeros();
+    colvec nzvalC(nnzC);
+    nzvalC.zeros();
   
   
-  //setenv("OMP_STACKSIZE","500M",1);
+   //setenv("OMP_STACKSIZE","500M",1);
   
-  // Counters and other scratch variables
-  uword i, jp, j, kp, k; 
-  uword nzmax = 0;
-  double nzB, nzA; 
-  ivec xb(mA);
-  xb.fill(-1);
-  const int increasefactor =2;
+   // Counters and other scratch variables
+    uword i, jp, j, kp, k; 
+    uword nzmax = 0;
+    double nzB, nzA; 
+    ivec xb(mA);
+    xb.fill(-1);
+    const int increasefactor =2;
   
   
-  //uvec nzmax_vec(nB,fill::zeros);
+   //uvec nzmax_vec(nB,fill::zeros);
   
-  // Loop Logic :: CSC format requires traversing by entries of column to optimize efficiency // 
+   // Loop Logic :: CSC format requires traversing by entries of column to optimize efficiency // 
   
-  //// Outer loop is over columns of B
+   //// Outer loop is over columns of B
   
-  ////// For each column of B, mid loop is over non-zero elements of that columns of B
+   ////// For each column of B, mid loop is over non-zero elements of that columns of B
   
-  ///////// For each nnz. element of that column of B, inner loop is over nnz. elements of corresponding
-  ///////// column (that matches with row number of that element of B) of A 
+   ///////// For each nnz. element of that column of B, inner loop is over nnz. elements of corresponding
+   ///////// column (that matches with row number of that element of B) of A 
   
-  ////// So, as we traverse down elements of a column of B, we travers right over corr. columns of A
-  ///// & then sum accordingly
+   ////// So, as we traverse down elements of a column of B, we travers right over corr. columns of A
+   ///// & then sum accordingly
   
-  for(i=0; i< nB; i++) { 
+   for(i=0; i< nB; i++) { 
     
     
-    for ( jp = B.col_ptrs[i]; jp < B.col_ptrs[i+1]; jp++) {
+     for ( jp = B.col_ptrs[i]; jp < B.col_ptrs[i+1]; jp++) {
       
-      j = B.row_indices[jp];
-      nzB = B.values[jp];
+       j = B.row_indices[jp];
+       nzB = B.values[jp];
       
       
-      for ( kp = A.col_ptrs[j]; kp < A.col_ptrs[j+1]; kp++ ){
+       for ( kp = A.col_ptrs[j]; kp < A.col_ptrs[j+1]; kp++ ){
         
-        k = A.row_indices[kp];
-        nzA = A.values[kp];
+         k = A.row_indices[kp];
+         nzA = A.values[kp];
         
         
-        if (xb(k) != -1){
-          nzvalC(xb(k))+= nzA * nzB;
-        } else {
-          rowvalC(nzmax) = k;
-          xb(k) = nzmax;
-          nzvalC(nzmax) = nzA * nzB;
-          nzmax +=1;
+         if (xb(k) != -1){
+           nzvalC(xb(k))+= nzA * nzB;
+         } else {
+           rowvalC(nzmax) = k;
+           xb(k) = nzmax;
+           nzvalC(nzmax) = nzA * nzB;
+           nzmax +=1;
           
-        }
-      }
-    }
+         }
+       }
+     }
     
     
-    // fill it back with -1s (to save time: fill only where it changed, rest are -1 anyway) 
-    for(k = colptrC(i); k < nzmax; ++k){
-      xb(rowvalC(k)) = -1;
-    }
+     // fill it back with -1s (to save time: fill only where it changed, rest are -1 anyway) 
+     for(k = colptrC(i); k < nzmax; ++k){
+       xb(rowvalC(k)) = -1;
+     }
     
     colptrC(i+1) = nzmax;
     
-    //* Check if more memory is required
-    if ( (nnzC - nzmax)< mA) {
-      rowvalC.resize(increasefactor*nnzC);
-      nzvalC.resize(increasefactor*nnzC);
-      nnzC *= increasefactor;
-    } 
-  }
+     //* Check if more memory is required
+     if ( (nnzC - nzmax)< mA) {
+       rowvalC.resize(increasefactor*nnzC);
+       nzvalC.resize(increasefactor*nnzC);
+       nnzC *= increasefactor;
+     } 
+   }
   
-  // Put in the sp_mat container: it is already ordered! 
- uvec rit = rowvalC.subvec(0,nzmax-1);
- vec nzvalt = nzvalC.subvec(0,nzmax-1);
- sp_mat C = sort_row_indices(rit,colptrC,nzvalt,mA,nB);
+   // Put in the sp_mat container: it is already ordered! 
+  uvec rit = rowvalC.subvec(0,nzmax-1);
+  vec nzvalt = nzvalC.subvec(0,nzmax-1);
+  C = sort_row_indices(rit,colptrC,nzvalt,mA,nB);
+  
+  } 
   
   return C;
 }  
@@ -237,6 +249,12 @@ sp_mat spsp_to_spsym_serial(const arma::sp_mat &A, const arma::sp_mat &B, double
   // Define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
+  sp_mat C(mA,nB);
+  
+  if(nnzA>0 && nnzB>0){
+    
 
   // approximate initial number of non-zeros in the resultant matrix
   uword nnzC = ceil(mA * nB * p);
@@ -319,10 +337,10 @@ sp_mat spsp_to_spsym_serial(const arma::sp_mat &A, const arma::sp_mat &B, double
   }
 
   // Put in the sp_mat container: it is already ordered!
-  uvec rit = rowvalC.subvec(0,nzmax-1);
-  vec nzvalt = nzvalC.subvec(0,nzmax-1);
-  sp_mat C = sort_row_indices(rit,colptrC,nzvalt,mA,nB);
-
+   uvec rit = rowvalC.subvec(0,nzmax-1);
+   vec nzvalt = nzvalC.subvec(0,nzmax-1);
+   C = sort_row_indices(rit,colptrC,nzvalt,mA,nB);
+  }
 
   return C;
 }
@@ -333,11 +351,11 @@ sp_mat spsp_to_spsym_serial(const arma::sp_mat &A, const arma::sp_mat &B, double
 
 // openmp version of the spsp_to_spgen_serial. It in fact uses spsp_to_spgen_serial()
 
-
+// [[Rcpp::export]]
 sp_mat spsp_to_spgen_openmp(const arma::sp_mat &A, const arma::sp_mat &B, double p,
                             int nthreads){
 
-  omp_set_num_threads(nthreads);
+  
   int nchunks = nthreads;
   int ncolB= B.n_cols;
   int ncols_perChunk= ncolB/nchunks;
@@ -350,12 +368,19 @@ sp_mat spsp_to_spgen_openmp(const arma::sp_mat &A, const arma::sp_mat &B, double
     C = spsp_to_spgen_serial(A,B,p);
   } else {
 
-#pragma omp parallel for simd
+  // set stacksize, not really necessary unless you are running into memory issues
+    setenv("OMP_STACKSIZE","100M",1);
+    
+  omp_set_num_threads(nthreads);
+ #pragma omp parallel for shared(Cf,A,B,d,p,ncols_perChunk,ncolB,nchunks) private(i) default(none) schedule(auto)
     for(i=0;i<nchunks;i++){
+      //Rcout << "i= "<< i << std::endl;
       if(i < (nchunks-1)) {
-        Cf(i,0)= spsp_to_spgen_serial(A,B.cols(ncols_perChunk*i,ncols_perChunk*i+d),p);
+        sp_mat Bchunk=B.cols(ncols_perChunk*i,ncols_perChunk*i+d);
+        Cf(i,0)= spsp_to_spgen_serial(A,Bchunk,p);
       } else {
-        Cf(i,0)= spsp_to_spgen_serial(A,B.cols(ncols_perChunk*i,ncolB-1),p);
+        sp_mat Bchunk=B.cols(ncols_perChunk*i,ncolB-1);
+        Cf(i,0)= spsp_to_spgen_serial(A,Bchunk,p);
       }
     }
 
@@ -386,7 +411,11 @@ sp_mat spsp_to_spsym_openmp(const arma::sp_mat &A, const arma::sp_mat &B, double
     C = spsp_to_spsym_serial(A,B,p);
   } else {
 
-#pragma omp parallel for simd
+    // set stacksize, not really necessary unless you are running into memory issues
+    setenv("OMP_STACKSIZE","100M",1);
+    
+    omp_set_num_threads(nthreads);
+#pragma omp parallel for shared(Cf,A,B,d,p,ncols_perChunk,ncolB,nchunks) private(i) default(none) schedule(auto)
     for(i=0;i<nchunks;i++){
       if(i < (nchunks-1)) {
         Cf(i,0)= spsp_to_spsym_serial(A,B.cols(ncols_perChunk*i,ncols_perChunk*i+d),p);
@@ -420,6 +449,11 @@ sp_mat spsp_to_spgen_fast_openmp(const arma::sp_mat &A, const arma::sp_mat &B, i
   // define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
+  sp_mat Cab(mA,nB);
+
+  if(nnzA>0 && nnzB>0){
 
 
   // initialize the resultant dense matrix
@@ -447,11 +481,13 @@ sp_mat spsp_to_spgen_fast_openmp(const arma::sp_mat &A, const arma::sp_mat &B, i
         double nzA = A.values[kp];
         Cptr[nelem_bfr_ith_col+k] += nzA * nzB;
 
-      }
-    }
-  }
+       }
+     }
+   }
+   Cab=conv_to<arma::sp_mat>::from(C);
+ }
 
-  return conv_to<arma::sp_mat>::from(C);
+  return Cab;
 }
 
 
@@ -462,6 +498,11 @@ sp_mat spsp_to_spsym_fast_openmp(const arma::sp_mat &A, const arma::sp_mat &B,in
   // define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
+  sp_mat Cab(mA,nB);
+
+  if(nnzA>0 && nnzB>0){
 
 
   // initialize the resultant dense matrix
@@ -489,12 +530,14 @@ sp_mat spsp_to_spsym_fast_openmp(const arma::sp_mat &A, const arma::sp_mat &B,in
           k = A.row_indices[kp];
           double nzA = A.values[kp];
           Cptr[nelem_bfr_ith_col+k] += nzA * nzB;
-        }
-      }
-    }
+         }
+       }
+     }
+   }
+   Cab = conv_to<arma::sp_mat>::from(C);
   }
 
-  return conv_to<arma::sp_mat>::from(C);
+  return Cab;
 }
 
 //////////////////////////////////////
@@ -510,14 +553,17 @@ mat spsp_to_dnsgen_openmp(const arma::sp_mat &A, const arma::sp_mat &B, int nthr
   // define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
-
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
 
   // initialize the resultant dense matrix
   mat C(mA,nB,fill::zeros);
-  double* Cptr = C.begin();
 
+
+  if(nnzA>0 && nnzB>0){
 
   // counters and other variables
+  double* Cptr = C.begin();
   uword i, jp, j, kp, k;
 
   omp_set_num_threads(nthreads);
@@ -537,10 +583,10 @@ mat spsp_to_dnsgen_openmp(const arma::sp_mat &A, const arma::sp_mat &B, int nthr
         double nzA = A.values[kp];
         Cptr[nelem_bfr_ith_col+k] += nzA * nzB;
 
-      }
+       }
+     }
     }
   }
-
   return C;
 }
 
@@ -555,15 +601,18 @@ mat spsp_to_dnssym_openmp(const arma::sp_mat &A, const arma::sp_mat &B, int nthr
   // define matrix sizes
   const uword mA= A.n_rows;
   const uword nB= B.n_cols;
-
+  const uword nnzA = A.n_nonzero;
+  const uword nnzB=B.n_nonzero;
 
   // initialize the resultant dense matrix
   mat C(mA,nB,fill::zeros);
-  double* Cptr = C.begin();
 
 
-  // counters and other variables
-  uword i, jp, j, kp, k;
+  if(nnzA>0 && nnzB>0){
+
+    // counters and other variables
+    double* Cptr = C.begin();
+    uword i, jp, j, kp, k;
 
   omp_set_num_threads(nthreads);
 #pragma omp parallel for shared(Cptr,A,B) private(i,j,k,jp,kp) default(none) schedule(static)
@@ -583,11 +632,11 @@ mat spsp_to_dnssym_openmp(const arma::sp_mat &A, const arma::sp_mat &B, int nthr
         if(i <= k){
           double nzA = A.values[kp];
           Cptr[nelem_bfr_ith_col+k] += nzA * nzB;
-        }
-      }
-    }
+         }
+       }
+     }
+   }
   }
-
   return C;
 }
 
@@ -696,6 +745,7 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
 
   }
 
+  //return pAB;
 }
 
 
@@ -749,6 +799,7 @@ mat spsp_prodMat_openmp(const sp_mat &A, const sp_mat &B,const uword &isProdSym,
 
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
+
 
 
 
