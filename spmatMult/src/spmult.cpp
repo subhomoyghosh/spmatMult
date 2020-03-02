@@ -714,23 +714,75 @@ sp_mat spsp_prodSp_serial(const sp_mat &A, const sp_mat &B, const uword &isProdS
 
 
 // [[Rcpp::export]]
-sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdSym, double p, int nthreads){
+sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdSym, double p, int nthreadsUser){
 
-  // define matrix sizes
-  uvec dims(4);
-
-  dims.at(0) = A.n_rows;
-  dims.at(1) = A.n_cols;
-  dims.at(2) = B.n_rows;
-  dims.at(3) = B.n_cols;
-  int dA= dims(0)*dims(1);
-  int dB=dims(2)*dims(3);
-
+  //// MATRIX SIZES
+  int ncA=A.n_cols;
+  int nrB=B.n_rows;
+  int nrAB=A.n_rows;
+  int ncAB=B.n_cols;
+  int dA= nrAB*ncA;
+  int dB=nrB*ncAB;
+  int dAB= nrAB*ncAB;
+  ////
+ 
+  
+  //// SPARSITY DENSITY
+  int nnzA=A.n_nonzero;
+  int nnzB=B.n_nonzero;
+  double pA = nnzA/(double)dA;
+  double pB = nnzB/(double)dB;
+  double pAB=.1;
+  //double pAB = std::max(p,std::min(pA+pB,1.0));
+  
   // choose from prior expert knowledge a non-zero fraction for AB
-  double pA = A.n_nonzero/(double)dA;
-  double pB = B.n_nonzero/(double)dB;
-  double pAB = std::max(p,std::min(pA+pB,1.0));
+  if(pA<.05 && pB<.05){
+       pAB = pA + pB;
+  }
+  
+  if(p > .1){
+       pAB=p;
+  }
+  
+  // check if p*#nrowA > nrowA if not set it s.t. it covers at least one col
+  int nrpAB = ceil(p*dAB);
+  if(nrpAB<=nrAB){
+    pAB = std::max(.1,2*((nrAB)/(double)(dAB))); 
+  }
+  /////
+  
+  
+  
+  ///// THREADS MANAGEMENT
+  // Obtain environment containing function
+  Rcpp::Environment base("package:parallel"); 
+  
+  // Make function callable from C++
+  Rcpp::Function detectCores = base["detectCores"];
+  bool logical=FALSE;
+  bool alltest=FALSE;
+  int ncores= Rcpp::as<int >(detectCores(alltest,logical));
+  
+  //int nthreadsMax = omp_get_max_threads();
+  int nthreads=1;
+  if(nthreadsUser>ncores){
+      nthreads = ncores;
+  }else if(nthreadsUser<0){
+      nthreads = 1;
+  } else {
+     nthreads=nthreadsUser;
+  }
+  //////
+  
+  
+  ////  EMPTY CASE
+  if(nnzA==0 || nnzB==0) {
+    sp_mat AB(nrAB,ncAB);
+    return AB;
+  }
 
+  
+  //// NON-EMPTY CASE
   if( dA ==1 | dB ==1){
 
     return spspscalar_to_sp(A,B);
@@ -744,9 +796,11 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
     return spsp_to_spsym_openmp(A,B,pAB,nthreads);
 
   }
-
-  //return pAB;
+  ////
+  
 }
+
+
 
 
 // [[Rcpp::export]]
