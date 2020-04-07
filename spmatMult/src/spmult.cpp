@@ -715,7 +715,7 @@ sp_mat spsp_prodSp_serial(const sp_mat &A, const sp_mat &B, const uword &isProdS
 
 // [[Rcpp::export]]
 sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdSym, double p, int nthreadsUser){
-
+  
   //// MATRIX SIZES
   int ncA=A.n_cols;
   int nrB=B.n_rows;
@@ -723,33 +723,9 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
   int ncAB=B.n_cols;
   int dA= nrAB*ncA;
   int dB=nrB*ncAB;
-  int dAB= nrAB*ncAB;
+  //int dAB= nrAB*ncAB;
   ////
- 
   
-  //// SPARSITY DENSITY
-  int nnzA=A.n_nonzero;
-  int nnzB=B.n_nonzero;
-  double pA = nnzA/(double)dA;
-  double pB = nnzB/(double)dB;
-  double pAB=.1;
-  //double pAB = std::max(p,std::min(pA+pB,1.0));
-  
-  // choose from prior expert knowledge a non-zero fraction for AB
-  if(pA<.05 && pB<.05){
-       pAB = pA + pB;
-  }
-  
-  if(p > .1){
-       pAB=p;
-  }
-  
-  // check if p*#nrowA > nrowA if not set it s.t. it covers at least one col
-  int nrpAB = ceil(p*dAB);
-  if(nrpAB<=nrAB){
-    pAB = std::max(.1,2*((nrAB)/(double)(dAB))); 
-  }
-  /////
   
   
   
@@ -766,13 +742,43 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
   //int nthreadsMax = omp_get_max_threads();
   int nthreads=1;
   if(nthreadsUser>ncores){
-      nthreads = ncores;
-  }else if(nthreadsUser<0){
-      nthreads = 1;
+    nthreads = ncores;
+  }else if(nthreadsUser==ncores){
+    nthreads = ncores-1;
+  } else if(nthreadsUser<0){
+    nthreads = 1;
   } else {
-     nthreads=nthreadsUser;
+    nthreads=nthreadsUser;
   }
   //////
+  
+  
+  //// SPARSITY DENSITY
+  int nnzA=A.n_nonzero;
+  int nnzB=B.n_nonzero;
+  double pA = nnzA/(double)dA;
+  double pB = nnzB/(double)dB;
+  double pAB=.1;
+  //double pAB = std::max(p,std::min(pA+pB,1.0));
+  
+  // choose from prior expert knowledge a non-zero fraction for AB
+  if(pA<.05 && pB<.05){
+    pAB = pA + pB;
+  }
+  
+  if(p > .1){
+    pAB=p;
+  }
+  
+  // check if p*#nrowA > nrowA if not set it s.t. it covers at least one col
+  double ncABperCore=ncAB/nthreads;
+  int nrpAB = ceil(p*nrAB*ncABperCore);
+  if(nrpAB<=nrAB){
+    pAB = std::max(.1,2*((nrAB)/(double)(nrAB*ncABperCore))); 
+  }
+  /////
+  
+  
   
   
   ////  EMPTY CASE
@@ -781,9 +787,9 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
     return AB;
   }
 
-  
+
   //// NON-EMPTY CASE
-  if( dA ==1 | dB ==1){
+  if( dA ==1 || dB ==1){
 
     return spspscalar_to_sp(A,B);
 
@@ -796,7 +802,8 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
     return spsp_to_spsym_openmp(A,B,pAB,nthreads);
 
   }
-  ////
+  //
+  
   
 }
 
@@ -804,56 +811,105 @@ sp_mat spsp_prodSp_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdS
 
 
 // [[Rcpp::export]]
-sp_mat spsp_prodSp_fast_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdSym, int nthreads){
-
-
+sp_mat spsp_prodSp_fast_openmp(const sp_mat &A, const sp_mat &B, const uword &isProdSym, int nthreadsUser){
+  
+  
   // define matrix sizes
   uvec dims(4);
-
+  
   dims.at(0) = A.n_rows;
   dims.at(1) = A.n_cols;
   dims.at(2) = B.n_rows;
   dims.at(3) = B.n_cols;
   int dA= dims(0)*dims(1);
   int dB=dims(2)*dims(3);
-
-  if( dA ==1 | dB ==1){
-
-    return spspscalar_to_sp(A,B);
-
-  } else if(isProdSym==0){
-
-    return spsp_to_spgen_fast_openmp(A,B,nthreads);
-
-  } else if(isProdSym==1){
-
-    return spsp_to_spsym_fast_openmp(A,B,nthreads);
-
+  
+  
+    ///// THREADS MANAGEMENT
+  // Obtain environment containing function
+  Rcpp::Environment base("package:parallel"); 
+  
+  // Make function callable from C++
+  Rcpp::Function detectCores = base["detectCores"];
+  bool logical=FALSE;
+  bool alltest=FALSE;
+  int ncores= Rcpp::as<int >(detectCores(alltest,logical));
+  
+  //int nthreadsMax = omp_get_max_threads();
+  int nthreads=1;
+  if(nthreadsUser>ncores){
+    nthreads = ncores;
+  }else if(nthreadsUser==ncores){
+    nthreads = ncores-1;
+  } else if(nthreadsUser<0){
+    nthreads = 1;
+  } else {
+    nthreads=nthreadsUser;
   }
-
+  //////
+   
+  
+  
+  
+  if( dA ==1 | dB ==1){
+    
+    return spspscalar_to_sp(A,B);
+    
+  } else if(isProdSym==0){
+    
+    return spsp_to_spgen_fast_openmp(A,B,nthreads);
+    
+  } else if(isProdSym==1){
+    
+    return spsp_to_spsym_fast_openmp(A,B,nthreads);
+    
+  }
+  
 }
 
 
 // [[Rcpp::export]]
-mat spsp_prodMat_openmp(const sp_mat &A, const sp_mat &B,const uword &isProdSym, int nthreads){
-
-
-
-  if(isProdSym==1) {
-
-    return spsp_to_dnssym_openmp(A,B,nthreads);
-
+mat spsp_prodMat_openmp(const sp_mat &A, const sp_mat &B,const uword &isProdSym, int nthreadsUser){
+  
+  
+  ///// THREADS MANAGEMENT
+  // Obtain environment containing function
+  Rcpp::Environment base("package:parallel"); 
+  
+  // Make function callable from C++
+  Rcpp::Function detectCores = base["detectCores"];
+  bool logical=FALSE;
+  bool alltest=FALSE;
+  int ncores= Rcpp::as<int >(detectCores(alltest,logical));
+  
+  //int nthreadsMax = omp_get_max_threads();
+  int nthreads=1;
+  if(nthreadsUser>ncores){
+    nthreads = ncores;
+  }else if(nthreadsUser==ncores){
+    nthreads = ncores-1;
+  } else if(nthreadsUser<0){
+    nthreads = 1;
   } else {
-
-    return spsp_to_dnsgen_openmp(A,B,nthreads);
-
+    nthreads=nthreadsUser;
   }
+  //////
+  
 
+  
+  
+  if(isProdSym==1) {
+    
+    return spsp_to_dnssym_openmp(A,B,nthreads);
+    
+  } else {
+    
+    return spsp_to_dnsgen_openmp(A,B,nthreads);
+    
+  }
+  
 }
 
 ////////////////////////////////////////////////
 ////////////////////////////////////////////////
-
-
-
 
